@@ -231,7 +231,7 @@ def load(directory: str) -> Generator[dict[str, str | Any], None, None]:
 
 
 ################################################################################
-# Rearange amd Save
+# Rearrange and Save
 
 BILLS_INDICES: list[str] = [
     "用户编号", "计量点编号", "用电开始时间", "用电结束时间"]
@@ -260,17 +260,15 @@ def sort_index_and_write_csv(dataframe: pandas.DataFrame, path: str) -> None:
 ################################################################################
 # Main
 
-if __name__ == '__main__':
-    bills = list(load(directory))
-    if bills:
+bills = list(load(directory))
+if bills:
 
-        bills_dataframe = pandas.DataFrame(bills)
-        bills_dataframe.set_index(BILLS_INDICES, inplace=True)
-        sort_index_and_write_csv(bills_dataframe,
-            os.path.join(directory, BILLS_FILE_NAME))
+    bills_dataframe = pandas.DataFrame(bills)
+    bills_dataframe.set_index(BILLS_INDICES, inplace=True)
+    sort_index_and_write_csv(bills_dataframe,
+        os.path.join(directory, BILLS_FILE_NAME))
 
-        bills_rearranged = rearrange_bills(bills, *BILLS_REARRANGED_KEYS)
-        bills_rearranged_dataframe = pandas.DataFrame(bills_rearranged)
-        sort_index_and_write_csv(bills_rearranged_dataframe,
-            os.path.join(directory, BILLS_REARRANGED_FILE_NAME))
-
+    bills_rearranged = rearrange_bills(bills, *BILLS_REARRANGED_KEYS)
+    bills_rearranged_dataframe = pandas.DataFrame(bills_rearranged)
+    sort_index_and_write_csv(bills_rearranged_dataframe,
+        os.path.join(directory, BILLS_REARRANGED_FILE_NAME))
