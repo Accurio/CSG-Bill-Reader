@@ -11,7 +11,7 @@ from typing import Any, Callable, Generator, Sequence
 ################################################################################
 # Functions
 
-def search(pattern: re.Pattern, string: str) -> dict[str, str]:
+def search_to_dict(pattern: re.Pattern, string: str) -> dict[str, str]:
     match = pattern.search(string)
     if match is None:
         raise ValueError("No Match!")
@@ -25,7 +25,7 @@ def str_add_apostrophe(string: str | Any) -> str | Any:
     else:
         return string
 
-def date_fromisoformat(date: str | datetime.date | Any) -> datetime.date | Any:
+def date_from_iso_format(date: str | datetime.date | Any) -> datetime.date | Any:
     if isinstance(date, datetime.date):
         return date
     elif not sys.version_info >= (3, 11) and len(date) == 8:
@@ -37,11 +37,11 @@ def date_fromisoformat(date: str | datetime.date | Any) -> datetime.date | Any:
 def convert_type(pairs: dict[str, Any],
     conversions: dict[Callable, Sequence[str]]
 ) -> None:
-    for t, keys in conversions.items():
+    for type_, keys in conversions.items():
         for key in keys:
             value = pairs.get(key)
             if value is not None:
-                pairs[key] = t(value)
+                pairs[key] = type_(value)
             else:
                 pairs.pop(key, None)
 
@@ -89,10 +89,10 @@ INFORMATION_PATTERN: re.Pattern = re.compile((
 
 INFORMATION_CONVERSIONS: dict[Callable, tuple[str]] = {
     str_add_apostrophe: ("用户编号", "结算户号", "计量点编号"),
-    date_fromisoformat: ("用电开始时间", "用电结束时间")}
+    date_from_iso_format: ("用电开始时间", "用电结束时间")}
 
 def extract_information(text: str) -> dict[str, str | Any]:
-    information = search(INFORMATION_PATTERN, text)
+    information = search_to_dict(INFORMATION_PATTERN, text)
     convert_type(information, INFORMATION_CONVERSIONS)
     return information
 
@@ -111,7 +111,7 @@ CONSUMPTION_分时_CHECK_PATTERN: re.Pattern = re.compile(
 CONSUMPTION_PATTERN_STR_ITEMS: tuple[str] = (
     r"[\d\.-]+", r"\(千瓦时\)", *CONSUMPTION_非分时_ITEMS, "表计资产编号",
     "上次表示数", "本次表示数", "倍率", "抄见电量", "换表电量", "退补电量",
-    "变线损电量", "公摊电量", "免费电量", "分表电量", "尖峰调整电量", "合计电量",)
+    "变线损电量", "公摊电量", "免费电量", "分表电量", "尖峰调整电量", "合计电量")
 
 CONSUMPTION_非分时_PATTERN: re.Pattern = re.compile((
     # 电量信息 Electricity Consumption Details
@@ -168,12 +168,12 @@ CONSUMPTION_分时_CONVERSIONS: dict[Callable, tuple[str]] = {
 
 def extract_consumption(text: str) -> dict[str, str | Any]:
     if CONSUMPTION_非分时_CHECK_PATTERN.search(text) is not None:
-        consumption = search(CONSUMPTION_非分时_PATTERN, text)
+        consumption = search_to_dict(CONSUMPTION_非分时_PATTERN, text)
         consumption["表计资产编号"] = consumption["有功总表计资产编号"]
         convert_type(consumption, CONSUMPTION_非分时_CONVERSIONS)
 
     elif CONSUMPTION_分时_CHECK_PATTERN.search(text) is not None:
-        consumption = search(CONSUMPTION_分时_PATTERN, text)
+        consumption = search_to_dict(CONSUMPTION_分时_PATTERN, text)
         consumption["表计资产编号"] = consumption["平表计资产编号"]
         consumption["有功总合计电量"] = sum(
             float(consumption[示数类型+"合计电量"])
@@ -199,7 +199,7 @@ BILL_CONVERSIONS: dict[Callable, tuple[str]] = {
     float: ("应收电费合计", "平均电价")}
 
 def extract_bill(text: str) -> dict[str, str | Any]:
-    bill = search(BILL_PATTERN, text)
+    bill = search_to_dict(BILL_PATTERN, text)
     convert_type(bill, BILL_CONVERSIONS)
     return bill
 
@@ -207,14 +207,14 @@ def extract_bill(text: str) -> dict[str, str | Any]:
 ################################################################################
 # Read and Extract
 
-directory = sys.argv[-1] if len(sys.argv) == 2 else os.path.dirname(__file__)
-
-def read(directory: str) -> Generator[dict[str, str], None, None]:
+def load(directory: str) -> Generator[dict[str, str | Any], None, None]:
     for path, dirs_name, files_name in os.walk(directory):
         for file_name in files_name:
             if os.path.splitext(file_name)[-1] == '.pdf':
                 for page in pypdf.PdfReader(os.path.join(path, file_name)).pages:
-                    yield page.extract_text()
+                    bill = extract(page.extract_text())
+                    if bill is not None:
+                        yield bill
 
 def extract(text: str) -> dict[str, str | Any] | None:
     if not check_text(CHECK_PATTERN, text):
@@ -223,52 +223,30 @@ def extract(text: str) -> dict[str, str | Any] | None:
     return extract_information(text) \
         | extract_consumption(text) | extract_bill(text)
 
-def load(directory: str) -> Generator[dict[str, str | Any], None, None]:
-    for text in read(directory):
-        bill = extract(text)
-        if bill is not None:
-            yield bill
-
 
 ################################################################################
-# Rearrange and Save
+# Save
 
 BILLS_INDICES: list[str] = [
     "用户编号", "计量点编号", "用电开始时间", "用电结束时间"]
 BILLS_FILE_NAME: str = "账单.csv"
 
-BILLS_REARRANGED_KEYS: tuple = (
-    ("用户编号", "计量点编号"), # Columns
-    ("用电开始时间", "用电结束时间"), # Indices
-    "有功总合计电量") # Value
-BILLS_REARRANGED_FILE_NAME: str = BILLS_REARRANGED_KEYS[-1] + '.csv'
-
-def rearrange_bills(bills: list[dict[Any, Any]],
-    columns: tuple[Any], indices: tuple[Any], value: Any
-):
-    dicts = dict()
-    for bill in bills:
-        dicts.setdefault(tuple(bill[column] for column in columns), dict())\
-        [tuple(bill[index] for index in indices)] = bill[value]
-    return dicts
-
-def sort_index_and_write_csv(dataframe: pandas.DataFrame, path: str) -> None:
-    dataframe.sort_index(inplace=True)
-    dataframe.to_csv(path, encoding='utf-8-sig')
+BILLS_PIVOT: dict[str, str | tuple[str]] = {
+    "index": ("用电开始时间", "用电结束时间"),
+    "columns": ("用户编号", "计量点编号"),
+    "values": "有功总合计电量"}
+BILLS_PIVOT_FILE_NAME: str = BILLS_PIVOT["values"] + '.csv'
 
 
 ################################################################################
 # Main
 
-bills = list(load(directory))
-if bills:
-
-    bills_dataframe = pandas.DataFrame(bills)
-    bills_dataframe.set_index(BILLS_INDICES, inplace=True)
-    sort_index_and_write_csv(bills_dataframe,
-        os.path.join(directory, BILLS_FILE_NAME))
-
-    bills_rearranged = rearrange_bills(bills, *BILLS_REARRANGED_KEYS)
-    bills_rearranged_dataframe = pandas.DataFrame(bills_rearranged)
-    sort_index_and_write_csv(bills_rearranged_dataframe,
-        os.path.join(directory, BILLS_REARRANGED_FILE_NAME))
+if __name__ == '__main__':
+    directory = sys.argv[-1] if len(sys.argv) == 2 else os.path.dirname(__file__)
+    bills = list(load(directory))
+    if bills:
+        bills = pandas.DataFrame(bills)
+        bills.set_index(BILLS_INDICES).sort_index().to_csv(
+            os.path.join(directory, BILLS_FILE_NAME), encoding='utf-8-sig')
+        pandas.pivot(bills, **BILLS_PIVOT).sort_index().to_csv(
+            os.path.join(directory, BILLS_PIVOT_FILE_NAME), encoding='utf-8-sig')
