@@ -6,13 +6,12 @@
 
 ## 使用方法
 
-下载 [`main.py`](main.py) 至电费通知单所在文件夹下，运行 `main.py`。
+1. 确保已安装 [Python](https://www.python.org/)>=3.10 和 [pypdf](https://pypdf.readthedocs.io/)==5.0.1、[pandas](https://pandas.pydata.org/)，后两者可通过 `pip install pypdf==5.0.1 pandas` 安装。
+2. 下载 [`main.py`](main.py) 至电费通知单所在文件夹下，运行 `main.py`。
 
-## 依赖
+## 已知问题
 
-- [Python](https://www.python.org/)>=3.10
-- [pypdf](https://pypdf.readthedocs.io/)
-- [pandas](https://pandas.pydata.org/)
+由于使用pypdf和正则表达式匹配文本和表格，若pypdf版本更新或电费单细节更新，可能会无法匹配。
 
 ## 电费通知单(账单)适用版本
 
