@@ -7,7 +7,7 @@
 ## 使用方法
 
 1. 确保已安装 [Python](https://www.python.org/)>=3.10 和 [pypdf](https://pypdf.readthedocs.io/)==5.0.1、[pandas](https://pandas.pydata.org/)，后两者可通过 `pip install pypdf==5.0.1 pandas` 安装。
-2. 下载 [`main.py`](main.py) 至电费通知单所在文件夹下，运行 `main.py`。
+2. 下载 [`reader.py`](reader.py) 至电费通知单所在文件夹下，运行 `reader.py`。
 
 ## 已知问题
 
